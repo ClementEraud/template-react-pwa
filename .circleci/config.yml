@@ -1,14 +1,36 @@
-# This config is equivalent to both the '.circleci/extended/orb-free.yml' and the base '.circleci/config.yml'
-version: 2.1
+version: "2.1"
 
-orbs:
-  node: circleci/node@4.1
+jobs:
+  build-docker-image:
+    docker:
+      - image: circleci/node:14.15.0
+    working_directory: ~/project
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 19.03.13
+      - run: 
+          name: Login to Scaleway image registry
+          command: docker login rg.fr-par.scw.cloud/clement-registry -u nologin -p $SCW_SECRET_KEY
+      - run: 
+          name: Build docker image
+          command: docker build -f Dockerfile.prod -t rg.fr-par.scw.cloud/clement-registry/tmpl-react .
+      - run:
+          name: Push image to registry
+          command: docker push rg.fr-par.scw.cloud/clement-registry/tmpl-react
+  deploy:
+    docker:
+      - image: circleci/node:14.15.0
+    steps:
+      - run:
+          name: Launch deploy
+          command: ssh -o StrictHostKeyChecking=no root@163.172.190.45 sh deploy.sh rg.fr-par.scw.cloud/clement-registry/tmpl-react 80
 
 workflows:
-  sample:
+  version: "2"
+  build:
     jobs:
-      - node/test:
-          version: '15.1'
-          # This is the node version to use for the `cimg/node` tag
-          # Relevant tags can be found on the CircleCI Developer Hub
-          # https://circleci.com/developer/images/image/cimg/node
+      - build-docker-image
+      - deploy:
+          requires:
+            - build-docker-image
